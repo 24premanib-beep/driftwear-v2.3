@@ -13,6 +13,8 @@ RUN pip install -r backend/requirements.txt
 COPY ml ml
 COPY data data
 COPY backend backend
+# Hosts that build with a strict umask (Render, CI) copy folders as root-only; the non-root user must read them.
+RUN chmod -R a+rX /srv
 
 RUN useradd --create-home --uid 10001 app && mkdir -p /srv/models && chown -R app:app /srv/models
 USER app
