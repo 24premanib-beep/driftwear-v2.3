@@ -1,0 +1,11 @@
+.git
+**/__pycache__
+**/.pytest_cache
+**/node_modules
+frontend/dist
+models/*
+!models/.gitkeep
+legacy_streamlit
+**/.env
+**/*.db
+e2e

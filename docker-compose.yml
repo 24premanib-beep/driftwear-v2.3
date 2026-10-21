@@ -1,0 +1,72 @@
+# Full stack: PostgreSQL + FastAPI backend + React frontend (nginx).
+#   cp .env.example .env    # set JWT_SECRET, ADMIN_PASSWORD and POSTGRES_PASSWORD
+#   docker compose up --build
+# App: http://localhost:8080   API docs: http://localhost:8080/docs   Health: http://localhost:8080/health
+# Startup order: db (healthy) → backend (runs `alembic upgrade head`, then serves; healthy) → frontend.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-driftwear}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-driftwear}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-driftwear}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-driftwear}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (at least 32 random characters)}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-60}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      ADMIN_NAME: ${ADMIN_NAME:-Administrator}
+      MODEL_STORAGE_BACKEND: ${MODEL_STORAGE_BACKEND:-local}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_PREFIX: ${S3_PREFIX:-driftwear/models}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+      S3_REGION: ${S3_REGION:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-5}
+      SIMULATION_ENABLED: ${SIMULATION_ENABLED:-true}
+      DEFAULT_DETECTOR: ${DEFAULT_DETECTOR:-DDM}
+      PREDICTION_RATE_LIMIT: ${PREDICTION_RATE_LIMIT:-120}
+      EVENT_BATCH_MAX: ${EVENT_BATCH_MAX:-100}
+      LOGIN_RATE_LIMIT: ${LOGIN_RATE_LIMIT:-10}
+    volumes:
+      - models:/srv/models
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${API_PORT:-8000}:8000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      BACKEND_URL: http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  models:
